@@ -1,0 +1,38 @@
+name: Run Selenium Script
+
+on:
+  workflow_dispatch:   # 手动触发
+  schedule:            # 每天凌晨 1 点自动执行（可删）
+    - cron: "0 1 * * *"
+
+jobs:
+  run-selenium:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Chrome
+      run: |
+        sudo apt update
+        sudo apt install -y wget gnupg unzip
+        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo apt install -y ./google-chrome-stable_current_amd64.deb
+
+    - name: Install ChromeDriver
+      run: |
+        CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+        DRIVER_VERSION=$(wget -qO- "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$CHROME_VERSION")
+        wget https://storage.googleapis.com/chrome-for-testing-public/${DRIVER_VERSION}/linux64/chromedriver-linux64.zip
+        unzip chromedriver-linux64.zip
+        sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+
+    - name: Install Python Dependencies
+      run: |
+        pip install selenium
+
+    - name: Run Selenium
+      run: |
+        python3 auto_login.py
