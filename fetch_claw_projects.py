@@ -33,4 +33,5 @@ if response.status_code == 200:
 
 else:
     print(f"❌ 获取项目失败: {response.status_code} {response.text}")
-    response.raise_for_status()
+    # 打印详细错误信息
+    print(f"完整错误信息: {response.content.decode('utf-8')}")
