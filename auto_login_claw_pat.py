@@ -1,33 +1,36 @@
 import os
 import requests
+import json
 
-# 从 GitHub Secrets 获取 PAT
-GITHUB_PAT = os.getenv("CLAW_GH_PAT")
-if not GITHUB_PAT:
-    raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
+# 获取 GitHub Secrets 中的 CLAW_TOKEN
+token = os.getenv("CLAW_TOKEN")  # 从 GitHub Actions Secret 中获取
 
-# ClawCloud OAuth 回调接口（假设支持用 PAT 授权）
-CLAWCLOUD_OAUTH_URL = "https://oauth.run.claw.cloud/callback"
-CLAWCLOUD_API_PROJECTS = "https://ap-southeast-1.run.claw.cloud/api/projects"
+if not token:
+    raise Exception("❌ CLAW_TOKEN is missing! 请确保将 token 存储在 GitHub Secrets 中。")
 
-# 1️⃣ 使用 GitHub PAT 获取 GitHub 用户信息
-gh_headers = {"Authorization": f"token {GITHUB_PAT}"}
-gh_resp = requests.get("https://api.github.com/user", headers=gh_headers)
-if gh_resp.status_code != 200:
-    raise Exception(f"GitHub PAT 验证失败: {gh_resp.status_code} {gh_resp.text}")
+# 设置 API 请求的头部，包含 Bearer token
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json"
+}
 
-gh_user = gh_resp.json()
-print(f"✅ GitHub PAT 验证成功，登录用户: {gh_user['login']}")
+# ClawCloud API URL
+api_url = "https://ap-southeast-1.run.claw.cloud/api/projects"  # 请根据 ClawCloud 的文档修改此 URL
 
-# 2️⃣ 使用 PAT 登录 ClawCloud（假设 OAuth 回调支持传 PAT）
-# 这里我们模拟 OAuth 回调请求，把 GitHub PAT 传给 ClawCloud
-claw_headers = {"Authorization": f"Bearer {GITHUB_PAT}"}
-claw_resp = requests.get(CLAWCLOUD_API_PROJECTS, headers=claw_headers)
+# 发送 GET 请求以获取项目信息
+response = requests.get(api_url, headers=headers)
 
-if claw_resp.status_code == 200:
-    projects = claw_resp.json()
-    print(f"✅ ClawCloud 登录成功，发现 {len(projects)} 个项目：")
-    for idx, project in enumerate(projects, start=1):
-        print(f"{idx}. {project.get('name','未命名项目')}")
+# 处理返回的响应
+if response.status_code == 200:
+    projects = response.json()
+    print(f"✅ 成功获取 {len(projects)} 个项目:")
+    for idx, project in enumerate(projects, 1):
+        print(f"{idx}. {project.get('name', '未命名项目')}")
+
+    # 将项目信息保存到一个 JSON 文件中
+    with open("projects.json", "w", encoding="utf-8") as f:
+        json.dump(projects, f, ensure_ascii=False, indent=2)
+
 else:
-    print(f"❌ ClawCloud 登录失败: {claw_resp.status_code} {claw_resp.text}")
+    print(f"❌ 获取项目失败: {response.status_code} {response.text}")
+    response.raise_for_status()
