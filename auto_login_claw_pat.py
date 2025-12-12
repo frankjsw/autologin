@@ -5,6 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 PAT = os.getenv("CLAW_GH_PAT")
 if not PAT:
@@ -44,10 +46,12 @@ try:
     except:
         pass
 
-    # 处理 OAuth 授权页面
+    # 显式等待授权按钮出现
     try:
-        # 找到 "Authorize" 按钮并点击
-        allow_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Authorize')]")
+        # 等待授权按钮可点击
+        allow_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize')]"))
+        )
         allow_btn.click()
         time.sleep(3)
     except Exception as e:
