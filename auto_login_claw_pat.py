@@ -46,10 +46,10 @@ try:
     except:
         pass
 
-    # 显式等待授权按钮
+    # 显式等待授权按钮，使用不同的定位方法
     try:
-        # 增加更宽松的等待，扩大搜索范围
-        allow_btn = WebDriverWait(driver, 15).until(
+        # 等待授权按钮，使用不同的定位策略
+        allow_btn = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize') or contains(text(),'Grant')]"))
         )
         allow_btn.click()
