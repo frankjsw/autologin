@@ -1,10 +1,10 @@
-name: Auto Login ClawCloud
+name: ClawCloud API Fetch
 
 on:
   workflow_dispatch:
 
 jobs:
-  login:
+  fetch_projects:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,100 +19,44 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium webdriver-manager requests
+          pip install requests
 
-      - name: Run Selenium auto login
+      - name: Fetch ClawCloud Projects
         env:
-          CLAW_GH_USERNAME: ${{ secrets.CLAW_GH_USERNAME }}
-          CLAW_GH_PASSWORD: ${{ secrets.CLAW_GH_PASSWORD }}
-          CLAW_2FA_CODE: ${{ secrets.CLAW_2FA_CODE }}
+          CLAW_TOKEN: ${{ secrets.CLAW_TOKEN }}
         run: |
           python - << 'EOF'
           import os
-          import time
           import requests
-          from selenium import webdriver
-          from selenium.webdriver.chrome.service import Service
-          from selenium.webdriver.common.by import By
-          from selenium.webdriver.support.ui import WebDriverWait
-          from selenium.webdriver.support import expected_conditions as EC
-          from webdriver_manager.chrome import ChromeDriverManager
+          import json
 
-          GH_USER = os.getenv("CLAW_GH_USERNAME")
-          GH_PASS = os.getenv("CLAW_GH_PASSWORD")
-          GH_2FA  = os.getenv("CLAW_2FA_CODE")  # 可选
+          token = os.getenv("CLAW_TOKEN")
+          if not token:
+              raise Exception("❌ CLAW_TOKEN is missing!")
 
-          CLAWCLOUD_URL = "https://ap-southeast-1.run.claw.cloud/signin"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/json"
+          }
 
-          # 初始化 Chrome
-          options = webdriver.ChromeOptions()
-          options.add_argument("--headless=new")
-          options.add_argument("--no-sandbox")
-          options.add_argument("--disable-dev-shm-usage")
-          driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+          api_url = "https://ap-southeast-1.run.claw.cloud/api/projects"
+          resp = requests.get(api_url, headers=headers)
 
-          try:
-              driver.get(CLAWCLOUD_URL)
-              time.sleep(3)
-
-              # 点击 GitHub 登录按钮
-              github_btn = WebDriverWait(driver, 10).until(
-                  EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'GitHub')]"))
-              )
-              github_btn.click()
-              time.sleep(3)
-
-              # 填写 GitHub 用户名
-              login_input = WebDriverWait(driver, 10).until(
-                  EC.presence_of_element_located((By.ID, "login_field"))
-              )
-              login_input.send_keys(GH_USER)
-
-              # 填写密码
-              pass_input = driver.find_element(By.ID, "password")
-              pass_input.send_keys(GH_PASS)
-              driver.find_element(By.NAME, "commit").click()
-              time.sleep(3)
-
-              # 处理 2FA（如果有）
-              if GH_2FA:
-                  otp_input = WebDriverWait(driver, 10).until(
-                      EC.presence_of_element_located((By.ID, "otp"))
-                  )
-                  otp_input.send_keys(GH_2FA)
-                  driver.find_element(By.XPATH, "//button[contains(., 'Verify')]").click()
-                  time.sleep(3)
-
-              # 处理授权按钮（如果存在）
-              try:
-                  allow_btn = WebDriverWait(driver, 10).until(
-                      EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize')]"))
-                  )
-                  allow_btn.click()
-                  time.sleep(3)
-              except:
-                  print("授权按钮未出现，可能已自动授权。")
-
-              # 登录完成，获取 ClawCloud 页面 cookie
-              cookies = driver.get_cookies()
-              session_cookie = next((c['value'] for c in cookies if c['name'] == 'session'), None)
-
-              if session_cookie:
-                  print("✅ ClawCloud 登录成功，session cookie:", session_cookie[:8] + "…")
-              else:
-                  print("❌ 登录失败，未获取 session cookie")
-
-              # 可用 session 调用 API 获取项目列表
-              headers = {"Cookie": f"session={session_cookie}"}
-              api_resp = requests.get("https://ap-southeast-1.run.claw.cloud/api/projects", headers=headers)
-              if api_resp.status_code == 200:
-                  projects = api_resp.json()
-                  print(f"✅ 项目列表 ({len(projects)}):")
-                  for idx, project in enumerate(projects, 1):
-                      print(f"{idx}. {project.get('name','未命名项目')}")
-              else:
-                  print(f"❌ 获取项目失败: {api_resp.status_code} {api_resp.text}")
-
-          finally:
-              driver.quit()
+          if resp.status_code == 200:
+              projects = resp.json()
+              print(f"✅ 成功获取 {len(projects)} 个项目:")
+              for idx, project in enumerate(projects, 1):
+                  print(f"{idx}. {project.get('name','未命名项目')}")
+              # 保存为 JSON 文件
+              with open("projects.json", "w") as f:
+                  json.dump(projects, f, ensure_ascii=False, indent=2)
+          else:
+              print(f"❌ 获取项目失败: {resp.status_code} {resp.text}")
+              resp.raise_for_status()
           EOF
+
+      - name: Upload Projects JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: claw_projects
+          path: projects.json
