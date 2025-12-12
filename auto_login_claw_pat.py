@@ -10,7 +10,7 @@ PAT = os.getenv("CLAW_GH_PAT")
 if not PAT:
     raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
 
-# Chrome 配置
+# 配置 Chrome 无头模式
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-gpu")
@@ -30,7 +30,6 @@ try:
     github_btns[0].click()
     time.sleep(3)
 
-    # 切换到 GitHub 登录窗口
     driver.switch_to.window(driver.window_handles[-1])
     time.sleep(2)
 
