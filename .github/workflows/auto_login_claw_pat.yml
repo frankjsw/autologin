@@ -1,59 +1,118 @@
 name: Auto Login ClawCloud
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   login:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ 设置 Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
 
-      # 3️⃣ 安装依赖
-      - name: Install requests
-        run: pip install requests
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium webdriver-manager requests
 
-      # 4️⃣ 运行自动登录脚本
-      - name: Run auto login script
+      - name: Run Selenium auto login
         env:
-          CLAW_GH_PAT: ${{ secrets.CLAW_GH_PAT }}
+          CLAW_GH_USERNAME: ${{ secrets.CLAW_GH_USERNAME }}
+          CLAW_GH_PASSWORD: ${{ secrets.CLAW_GH_PASSWORD }}
+          CLAW_2FA_CODE: ${{ secrets.CLAW_2FA_CODE }}
         run: |
           python - << 'EOF'
           import os
+          import time
           import requests
+          from selenium import webdriver
+          from selenium.webdriver.chrome.service import Service
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
+          from webdriver_manager.chrome import ChromeDriverManager
 
-          PAT = os.getenv("CLAW_GH_PAT")
-          if not PAT:
-              raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
+          GH_USER = os.getenv("CLAW_GH_USERNAME")
+          GH_PASS = os.getenv("CLAW_GH_PASSWORD")
+          GH_2FA  = os.getenv("CLAW_2FA_CODE")  # 可选
 
-          # GitHub 用户验证
-          gh_headers = {"Authorization": f"token {PAT}"}
-          gh_resp = requests.get("https://api.github.com/user", headers=gh_headers)
-          if gh_resp.status_code != 200:
-              raise Exception(f"GitHub PAT 验证失败: {gh_resp.status_code} {gh_resp.text}")
+          CLAWCLOUD_URL = "https://ap-southeast-1.run.claw.cloud/signin"
 
-          gh_user = gh_resp.json()
-          print(f"✅ GitHub PAT 验证成功，登录用户: {gh_user['login']}")
+          # 初始化 Chrome
+          options = webdriver.ChromeOptions()
+          options.add_argument("--headless=new")
+          options.add_argument("--no-sandbox")
+          options.add_argument("--disable-dev-shm-usage")
+          driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-          # ClawCloud 项目 API
-          CLAWCLOUD_API = "https://ap-southeast-1.run.claw.cloud/api/projects"
-          claw_headers = {"Authorization": f"Bearer {PAT}"}
-          claw_resp = requests.get(CLAWCLOUD_API, headers=claw_headers)
+          try:
+              driver.get(CLAWCLOUD_URL)
+              time.sleep(3)
 
-          if claw_resp.status_code == 200:
-              projects = claw_resp.json()
-              print(f"✅ ClawCloud 登录成功，发现 {len(projects)} 个项目：")
-              for idx, project in enumerate(projects, start=1):
-                  print(f"{idx}. {project.get('name','未命名项目')}")
-          else:
-              print(f"❌ ClawCloud 登录失败: {claw_resp.status_code} {claw_resp.text}")
+              # 点击 GitHub 登录按钮
+              github_btn = WebDriverWait(driver, 10).until(
+                  EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'GitHub')]"))
+              )
+              github_btn.click()
+              time.sleep(3)
+
+              # 填写 GitHub 用户名
+              login_input = WebDriverWait(driver, 10).until(
+                  EC.presence_of_element_located((By.ID, "login_field"))
+              )
+              login_input.send_keys(GH_USER)
+
+              # 填写密码
+              pass_input = driver.find_element(By.ID, "password")
+              pass_input.send_keys(GH_PASS)
+              driver.find_element(By.NAME, "commit").click()
+              time.sleep(3)
+
+              # 处理 2FA（如果有）
+              if GH_2FA:
+                  otp_input = WebDriverWait(driver, 10).until(
+                      EC.presence_of_element_located((By.ID, "otp"))
+                  )
+                  otp_input.send_keys(GH_2FA)
+                  driver.find_element(By.XPATH, "//button[contains(., 'Verify')]").click()
+                  time.sleep(3)
+
+              # 处理授权按钮（如果存在）
+              try:
+                  allow_btn = WebDriverWait(driver, 10).until(
+                      EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize')]"))
+                  )
+                  allow_btn.click()
+                  time.sleep(3)
+              except:
+                  print("授权按钮未出现，可能已自动授权。")
+
+              # 登录完成，获取 ClawCloud 页面 cookie
+              cookies = driver.get_cookies()
+              session_cookie = next((c['value'] for c in cookies if c['name'] == 'session'), None)
+
+              if session_cookie:
+                  print("✅ ClawCloud 登录成功，session cookie:", session_cookie[:8] + "…")
+              else:
+                  print("❌ 登录失败，未获取 session cookie")
+
+              # 可用 session 调用 API 获取项目列表
+              headers = {"Cookie": f"session={session_cookie}"}
+              api_resp = requests.get("https://ap-southeast-1.run.claw.cloud/api/projects", headers=headers)
+              if api_resp.status_code == 200:
+                  projects = api_resp.json()
+                  print(f"✅ 项目列表 ({len(projects)}):")
+                  for idx, project in enumerate(projects, 1):
+                      print(f"{idx}. {project.get('name','未命名项目')}")
+              else:
+                  print(f"❌ 获取项目失败: {api_resp.status_code} {api_resp.text}")
+
+          finally:
+              driver.quit()
           EOF
