@@ -28,7 +28,7 @@ try:
     driver.get("https://ap-southeast-1.run.claw.cloud/signin")
     time.sleep(2)
 
-    # 点击 GitHub 登录按钮（定位可能需要根据实际页面调整）
+    # 点击 GitHub 登录按钮（可能需要根据实际页面调整定位）
     github_btn = driver.find_element(By.XPATH, "//button[contains(., 'GitHub')]")
     github_btn.click()
     time.sleep(2)
@@ -50,8 +50,37 @@ try:
     except Exception:
         pass
 
-    # 返回 ClawCloud 控制台
-    print("登录完成，当前 URL:", driver.current_url)
+    # 切换回 ClawCloud 页面
+    driver.switch_to.window(driver.window_handles[0])
+    time.sleep(3)
+
+    # 验证登录成功
+    current_url = driver.current_url
+    login_success = False
+
+    # 方法1: 检查 URL
+    if "dashboard" in current_url or "console" in current_url:
+        login_success = True
+
+    # 方法2: 检查页面元素（例如用户名显示在右上角）
+    try:
+        user_element = driver.find_element(By.XPATH, f"//span[contains(text(), '{USERNAME}')]")
+        login_success = True
+    except:
+        pass
+
+    if login_success:
+        print("✅ 登录成功")
+        print("当前 URL:", driver.current_url)
+        # 可选: 输出控制台项目数量
+        try:
+            projects = driver.find_elements(By.CLASS_NAME, "project-card")  # 根据实际页面调整
+            print(f"发现 {len(projects)} 个项目")
+        except:
+            pass
+    else:
+        print("❌ 登录失败")
+        print("当前 URL:", driver.current_url)
 
 finally:
     driver.quit()
