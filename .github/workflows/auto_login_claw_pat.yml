@@ -1,34 +1,59 @@
-name: Auto Login ClawCloud with PAT
+name: Auto Login ClawCloud
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * *"  # 每天运行一次
+  workflow_dispatch:  # 手动触发
 
 jobs:
   login:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      # 1️⃣ 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2️⃣ 设置 Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: 3.11
 
-      - name: Install dependencies
-        run: |
-          pip install selenium webdriver-manager
+      # 3️⃣ 安装依赖
+      - name: Install requests
+        run: pip install requests
 
-      - name: Run auto-login
+      # 4️⃣ 运行自动登录脚本
+      - name: Run auto login script
         env:
           CLAW_GH_PAT: ${{ secrets.CLAW_GH_PAT }}
-        run: python auto_login_claw_pat.py
+        run: |
+          python - << 'EOF'
+          import os
+          import requests
 
-      - name: Upload screenshot if login failed
-        if: failure()
-        uses: actions/upload-artifact@v4  # 更新为 v4
-        with:
-          name: login-failure-screenshot
-          path: login_failed.png
+          PAT = os.getenv("CLAW_GH_PAT")
+          if not PAT:
+              raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
+
+          # GitHub 用户验证
+          gh_headers = {"Authorization": f"token {PAT}"}
+          gh_resp = requests.get("https://api.github.com/user", headers=gh_headers)
+          if gh_resp.status_code != 200:
+              raise Exception(f"GitHub PAT 验证失败: {gh_resp.status_code} {gh_resp.text}")
+
+          gh_user = gh_resp.json()
+          print(f"✅ GitHub PAT 验证成功，登录用户: {gh_user['login']}")
+
+          # ClawCloud 项目 API
+          CLAWCLOUD_API = "https://ap-southeast-1.run.claw.cloud/api/projects"
+          claw_headers = {"Authorization": f"Bearer {PAT}"}
+          claw_resp = requests.get(CLAWCLOUD_API, headers=claw_headers)
+
+          if claw_resp.status_code == 200:
+              projects = claw_resp.json()
+              print(f"✅ ClawCloud 登录成功，发现 {len(projects)} 个项目：")
+              for idx, project in enumerate(projects, start=1):
+                  print(f"{idx}. {project.get('name','未命名项目')}")
+          else:
+              print(f"❌ ClawCloud 登录失败: {claw_resp.status_code} {claw_resp.text}")
+          EOF
