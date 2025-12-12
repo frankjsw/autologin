@@ -3,11 +3,12 @@ name: Auto Login ClawCloud with PAT
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"  # 每天 6 点自动运行
+    - cron: "0 6 * * *"  # 每天运行一次
 
 jobs:
   login:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
@@ -18,9 +19,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4
+          pip install selenium webdriver-manager
 
       - name: Run auto-login
         env:
           CLAW_GH_PAT: ${{ secrets.CLAW_GH_PAT }}
         run: python auto_login_claw_pat.py
+
+      - name: Upload screenshot if login failed
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: login-failure-screenshot
+          path: login_failed.png
