@@ -46,11 +46,11 @@ try:
     except:
         pass
 
-    # 显式等待授权按钮出现
+    # 显式等待授权按钮
     try:
-        # 等待授权按钮可点击
-        allow_btn = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize')]"))
+        # 增加更宽松的等待，扩大搜索范围
+        allow_btn = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize') or contains(text(),'Grant')]"))
         )
         allow_btn.click()
         time.sleep(3)
