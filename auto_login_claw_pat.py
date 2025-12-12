@@ -1,65 +1,88 @@
 import os
-import requests
-from bs4 import BeautifulSoup
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
-# 从 GitHub Secrets 获取 Personal Access Token
 PAT = os.getenv("CLAW_GH_PAT")
 if not PAT:
     raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
 
-# GitHub API 验证 PAT
-headers = {
-    "Authorization": f"token {PAT}",
-    "Accept": "application/vnd.github.v3+json"
-}
+# Chrome 配置
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--window-size=1920,1080")
 
-resp = requests.get("https://api.github.com/user", headers=headers)
-if resp.status_code != 200:
-    print("❌ GitHub PAT 验证失败")
-    print("状态码:", resp.status_code)
-    print(resp.text)
-    exit(1)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
-user = resp.json()
-print(f"✅ GitHub PAT 验证成功，登录用户: {user['login']}")
+try:
+    driver.get("https://ap-southeast-1.run.claw.cloud/signin")
+    time.sleep(2)
 
-# -------------------------------
-# 使用 PAT 登录 ClawCloud
-# -------------------------------
-# ClawCloud OAuth 登录接口
-LOGIN_URL = "https://ap-southeast-1.run.claw.cloud/api/oauth/github"  # 假设 ClawCloud 提供 API
-session = requests.Session()
+    # 点击 GitHub 登录按钮
+    github_btns = driver.find_elements(By.XPATH, "//button[contains(., 'GitHub')]")
+    if not github_btns:
+        raise Exception("未找到 GitHub 登录按钮")
+    github_btns[0].click()
+    time.sleep(3)
 
-# 这里假设 ClawCloud 支持通过 Authorization Code 或 Token 获取 session
-# 如果 ClawCloud 支持 token 登录，可在这里直接传 token
-payload = {
-    "github_token": PAT
-}
-login_resp = session.post(LOGIN_URL, json=payload)
+    # 切换到 GitHub 登录窗口
+    driver.switch_to.window(driver.window_handles[-1])
+    time.sleep(2)
 
-if login_resp.status_code != 200:
-    print("❌ ClawCloud 登录失败")
-    print(login_resp.text)
-    exit(1)
+    # 如果 GitHub 登录需要用户名和 PAT
+    try:
+        username_input = driver.find_element(By.ID, "login_field")
+        password_input = driver.find_element(By.ID, "password")
+        username_input.send_keys("YOUR_GITHUB_USERNAME")  # 用你的 GitHub 用户名替换
+        password_input.send_keys(PAT)
+        driver.find_element(By.NAME, "commit").click()
+        time.sleep(5)
+    except:
+        pass
 
-print("✅ ClawCloud 登录成功")
+    # 处理授权页面
+    try:
+        allow_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Authorize')]")
+        allow_btn.click()
+        time.sleep(3)
+    except:
+        pass
 
-# -------------------------------
-# 获取控制台页面并解析项目列表
-# -------------------------------
-DASHBOARD_URL = "https://ap-southeast-1.run.claw.cloud/dashboard"
-dashboard_resp = session.get(DASHBOARD_URL)
+    # 切换回 ClawCloud 页面
+    driver.switch_to.window(driver.window_handles[0])
+    time.sleep(3)
 
-if dashboard_resp.status_code != 200:
-    print("❌ 无法访问控制台")
-    exit(1)
+    # 验证登录
+    login_success = False
+    current_url = driver.current_url
+    if "dashboard" in current_url or "console" in current_url:
+        login_success = True
+    else:
+        try:
+            projects = driver.find_elements(By.CLASS_NAME, "project-card")
+            if projects:
+                login_success = True
+        except:
+            pass
 
-soup = BeautifulSoup(dashboard_resp.text, "html.parser")
+    if login_success:
+        print("✅ 登录成功，当前 URL:", driver.current_url)
+        projects = driver.find_elements(By.CLASS_NAME, "project-card")
+        print(f"发现 {len(projects)} 个项目:")
+        for idx, project in enumerate(projects, start=1):
+            title = project.find_element(By.TAG_NAME, "h3").text if project.find_elements(By.TAG_NAME, "h3") else "未命名项目"
+            print(f"{idx}. {title}")
+    else:
+        # 登录失败，截屏
+        screenshot_file = "login_failed.png"
+        driver.save_screenshot(screenshot_file)
+        print("❌ 登录失败，当前 URL:", driver.current_url)
+        print(f"已保存截图: {screenshot_file}")
 
-# 假设项目列表在 class="project-card" 中
-projects = soup.find_all(class_="project-card")
-print(f"发现 {len(projects)} 个项目:")
-
-for idx, project in enumerate(projects, start=1):
-    title = project.find("h3")
-    print(f"{idx}. {title.text.strip() if title else '未命名项目'}")
+finally:
+    driver.quit()
