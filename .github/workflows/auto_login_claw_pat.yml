@@ -1,29 +1,33 @@
 name: ClawCloud API Fetch
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 触发该工作流的方式，可以手动触发
 
 jobs:
   fetch_projects:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境
 
     steps:
+      # 步骤 1：检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 步骤 2：设置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.11  # 设置 Python 版本
 
+      # 步骤 3：安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests  # 安装 requests 库
 
+      # 步骤 4：执行 Python 脚本以获取 ClawCloud 项目
       - name: Fetch ClawCloud Projects
         env:
-          CLAW_TOKEN: ${{ secrets.CLAW_TOKEN }}
+          CLAW_TOKEN: ${{ secrets.CLAW_TOKEN }}  # 从 GitHub Secrets 中获取 token
         run: |
           python - << 'EOF'
           import os
@@ -39,7 +43,7 @@ jobs:
               "Accept": "application/json"
           }
 
-          api_url = "https://ap-southeast-1.run.claw.cloud/api/projects"
+          api_url = "https://ap-southeast-1.run.claw.cloud/api/projects"  # ClawCloud API URL
           resp = requests.get(api_url, headers=headers)
 
           if resp.status_code == 200:
@@ -55,8 +59,9 @@ jobs:
               resp.raise_for_status()
           EOF
 
+      # 步骤 5：上传获取的项目 JSON 文件
       - name: Upload Projects JSON
         uses: actions/upload-artifact@v4
         with:
           name: claw_projects
-          path: projects.json
+          path: projects.json  # 上传文件
