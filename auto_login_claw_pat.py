@@ -46,9 +46,18 @@ try:
     except:
         pass
 
+    # 检查是否有 iframe，若有，切换到 iframe
+    try:
+        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        if iframes:
+            driver.switch_to.frame(iframes[0])  # 切换到第一个 iframe
+            print("切换到 iframe")
+    except Exception as e:
+        print(f"切换 iframe 失败: {e}")
+
     # 显式等待授权按钮，使用不同的定位方法
     try:
-        # 等待授权按钮，使用不同的定位策略
+        # 增加更灵活的等待，扩大搜索范围
         allow_btn = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize') or contains(text(),'Grant')]"))
         )
