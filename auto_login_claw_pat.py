@@ -1,102 +1,33 @@
 import os
-import time
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import requests
 
-PAT = os.getenv("CLAW_GH_PAT")
-if not PAT:
+# 从 GitHub Secrets 获取 PAT
+GITHUB_PAT = os.getenv("CLAW_GH_PAT")
+if not GITHUB_PAT:
     raise ValueError("请在 GitHub Secrets 中设置 CLAW_GH_PAT")
 
-# 配置 Chrome 无头模式
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--window-size=1920,1080")
+# ClawCloud OAuth 回调接口（假设支持用 PAT 授权）
+CLAWCLOUD_OAUTH_URL = "https://oauth.run.claw.cloud/callback"
+CLAWCLOUD_API_PROJECTS = "https://ap-southeast-1.run.claw.cloud/api/projects"
 
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+# 1️⃣ 使用 GitHub PAT 获取 GitHub 用户信息
+gh_headers = {"Authorization": f"token {GITHUB_PAT}"}
+gh_resp = requests.get("https://api.github.com/user", headers=gh_headers)
+if gh_resp.status_code != 200:
+    raise Exception(f"GitHub PAT 验证失败: {gh_resp.status_code} {gh_resp.text}")
 
-try:
-    driver.get("https://ap-southeast-1.run.claw.cloud/signin")
-    time.sleep(2)
+gh_user = gh_resp.json()
+print(f"✅ GitHub PAT 验证成功，登录用户: {gh_user['login']}")
 
-    # 点击 GitHub 登录按钮
-    github_btns = driver.find_elements(By.XPATH, "//button[contains(., 'GitHub')]")
-    if not github_btns:
-        raise Exception("未找到 GitHub 登录按钮")
-    github_btns[0].click()
-    time.sleep(3)
+# 2️⃣ 使用 PAT 登录 ClawCloud（假设 OAuth 回调支持传 PAT）
+# 这里我们模拟 OAuth 回调请求，把 GitHub PAT 传给 ClawCloud
+claw_headers = {"Authorization": f"Bearer {GITHUB_PAT}"}
+claw_resp = requests.get(CLAWCLOUD_API_PROJECTS, headers=claw_headers)
 
-    driver.switch_to.window(driver.window_handles[-1])
-    time.sleep(2)
-
-    # 如果 GitHub 登录需要用户名和 PAT
-    try:
-        username_input = driver.find_element(By.ID, "login_field")
-        password_input = driver.find_element(By.ID, "password")
-        username_input.send_keys("YOUR_GITHUB_USERNAME")  # 用你的 GitHub 用户名替换
-        password_input.send_keys(PAT)
-        driver.find_element(By.NAME, "commit").click()
-        time.sleep(5)
-    except:
-        pass
-
-    # 检查是否有 iframe，若有，切换到 iframe
-    try:
-        iframes = driver.find_elements(By.TAG_NAME, "iframe")
-        if iframes:
-            driver.switch_to.frame(iframes[0])  # 切换到第一个 iframe
-            print("切换到 iframe")
-    except Exception as e:
-        print(f"切换 iframe 失败: {e}")
-
-    # 显式等待授权按钮，使用不同的定位方法
-    try:
-        # 增加更灵活的等待，扩大搜索范围
-        allow_btn = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Authorize') or contains(text(),'Grant')]"))
-        )
-        allow_btn.click()
-        time.sleep(3)
-    except Exception as e:
-        print(f"授权按钮点击失败: {e}")
-        raise
-
-    # 切换回 ClawCloud 页面
-    driver.switch_to.window(driver.window_handles[0])
-    time.sleep(3)
-
-    # 验证登录
-    login_success = False
-    current_url = driver.current_url
-    if "dashboard" in current_url or "console" in current_url:
-        login_success = True
-    else:
-        try:
-            projects = driver.find_elements(By.CLASS_NAME, "project-card")
-            if projects:
-                login_success = True
-        except:
-            pass
-
-    if login_success:
-        print("✅ 登录成功，当前 URL:", driver.current_url)
-        projects = driver.find_elements(By.CLASS_NAME, "project-card")
-        print(f"发现 {len(projects)} 个项目:")
-        for idx, project in enumerate(projects, start=1):
-            title = project.find_element(By.TAG_NAME, "h3").text if project.find_elements(By.TAG_NAME, "h3") else "未命名项目"
-            print(f"{idx}. {title}")
-    else:
-        # 登录失败，截屏
-        screenshot_file = "login_failed.png"
-        driver.save_screenshot(screenshot_file)
-        print("❌ 登录失败，当前 URL:", driver.current_url)
-        print(f"已保存截图: {screenshot_file}")
-
-finally:
-    driver.quit()
+if claw_resp.status_code == 200:
+    projects = claw_resp.json()
+    print(f"✅ ClawCloud 登录成功，发现 {len(projects)} 个项目：")
+    for idx, project in enumerate(projects, start=1):
+        print(f"{idx}. {project.get('name','未命名项目')}")
+else:
+    print(f"❌ ClawCloud 登录失败: {claw_resp.status_code} {claw_resp.text}")
