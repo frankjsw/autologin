@@ -1,17 +1,20 @@
 name: Auto Login ClawCloud
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # 手动触发
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 6 * * *"  # 每天 6 点自动运行
 
 jobs:
   login:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
@@ -21,6 +24,6 @@ jobs:
 
       - name: Run auto-login
         env:
-          GITHUB_LOGIN_USER: ${{ secrets.GITHUB_LOGIN_USER }}
-          GITHUB_LOGIN_PASS: ${{ secrets.GITHUB_LOGIN_PASS }}
+          CLAW_GH_USER: ${{ secrets.MY_GITHUB_USER }}
+          CLAW_GH_PASS: ${{ secrets.MY_GITHUB_PASS }}
         run: python auto_login_claw.py
