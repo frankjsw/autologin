@@ -1,0 +1,26 @@
+name: Auto Login ClawCloud
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  login:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install selenium webdriver-manager
+
+      - name: Run auto-login
+        env:
+          GITHUB_LOGIN_USER: ${{ secrets.GITHUB_LOGIN_USER }}
+          GITHUB_LOGIN_PASS: ${{ secrets.GITHUB_LOGIN_PASS }}
+        run: python auto_login_claw.py
