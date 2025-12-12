@@ -44,13 +44,15 @@ try:
     except:
         pass
 
-    # 处理授权页面
+    # 处理 OAuth 授权页面
     try:
+        # 找到 "Authorize" 按钮并点击
         allow_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Authorize')]")
         allow_btn.click()
         time.sleep(3)
-    except:
-        pass
+    except Exception as e:
+        print(f"授权按钮点击失败: {e}")
+        raise
 
     # 切换回 ClawCloud 页面
     driver.switch_to.window(driver.window_handles[0])
